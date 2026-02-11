@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Missile Command</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="game-container"></div>
+      <div id="hud">
+        <div class="panel score-panel">
+          <div class="metric">
+            <span class="label">Score</span>
+            <span id="score">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">High</span>
+            <span id="high-score">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">Wave</span>
+            <span id="wave">1</span>
+          </div>
+          <div class="metric">
+            <span class="label">Cities</span>
+            <span id="cities">6</span>
+          </div>
+        </div>
+        <div class="panel controls-panel">
+          <button id="start-button">Start Mission</button>
+          <button id="audio-button" class="secondary">Mute</button>
+        </div>
+        <div id="stage-banner" aria-live="polite"></div>
+        <div id="status">Click the sky to intercept incoming missiles.</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
