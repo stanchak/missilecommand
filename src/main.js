@@ -56,6 +56,7 @@ class NeonMissileCommand {
     this.audioMuted = false;
     this.audioStarted = false;
     this.audioPriming = false;
+    this.audioReadyPromise = null;
 
     this.highScore = this._loadHighScore();
     this.highScoreBeforeMission = this.highScore;
@@ -433,21 +434,38 @@ class NeonMissileCommand {
   }
 
   async _ensureAudioReady() {
-    if (this.audioStarted || this.audioPriming) {
-      return;
+    if (this.audioStarted) {
+      return true;
+    }
+
+    if (this.audioReadyPromise) {
+      return this.audioReadyPromise;
     }
 
     this.audioPriming = true;
-    try {
-      await this.audio.init();
-      if (this.audio.ready) {
-        this.audioStarted = true;
-        this.audio.setMuted(this.audioMuted);
+    this.audioReadyPromise = (async () => {
+      try {
+        await this.audio.init();
+        if (this.audio.ready) {
+          this.audioStarted = true;
+          this.audio.setMuted(this.audioMuted);
+          if (this.running && !this.audioMuted) {
+            this.audio.resumeIfSuspended();
+            this.audio.newMission();
+          }
+          return true;
+        }
+      } catch (_error) {
+        // Keep gameplay running even if Safari blocks audio init.
       }
-    } catch (_error) {
-      // Keep gameplay running even if Safari blocks audio init.
+      return false;
+    })();
+
+    try {
+      return await this.audioReadyPromise;
     } finally {
       this.audioPriming = false;
+      this.audioReadyPromise = null;
     }
   }
 
@@ -761,6 +779,8 @@ class NeonMissileCommand {
   _handleAimInput(clientX, clientY) {
     if (this.audioStarted) {
       this.audio.resumeIfSuspended();
+    } else {
+      this._ensureAudioReady();
     }
 
     if (!this.running || this.waveTransition) {
