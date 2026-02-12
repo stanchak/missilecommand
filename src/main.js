@@ -55,6 +55,7 @@ class NeonMissileCommand {
     this.audio = new AudioManager();
     this.audioMuted = false;
     this.audioStarted = false;
+    this.audioPriming = false;
 
     this.highScore = this._loadHighScore();
     this.highScoreBeforeMission = this.highScore;
@@ -409,8 +410,11 @@ class NeonMissileCommand {
     this.handlePointerDown = this.handlePointerDown.bind(this);
     this.handleStartClick = this.handleStartClick.bind(this);
     this.handleAudioClick = this.handleAudioClick.bind(this);
+    this.handleUserGesture = this.handleUserGesture.bind(this);
 
     window.addEventListener('resize', this.handleResize);
+    window.addEventListener('pointerdown', this.handleUserGesture, { passive: true });
+    window.addEventListener('touchstart', this.handleUserGesture, { passive: true });
     this.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
     this.startButton.addEventListener('click', this.handleStartClick);
     this.audioButton.addEventListener('click', this.handleAudioClick);
@@ -426,6 +430,29 @@ class NeonMissileCommand {
     this.bloomPass.setSize(width, height);
   }
 
+  handleUserGesture() {
+    if (this.audioStarted) {
+      this.audio.resumeIfSuspended();
+      return;
+    }
+
+    if (this.audioPriming) {
+      return;
+    }
+
+    this.audioPriming = true;
+    this.audio.warmup()
+      .then(() => {
+        if (this.audio.ready) {
+          this.audioStarted = true;
+          this.audio.setMuted(this.audioMuted);
+        }
+      })
+      .finally(() => {
+        this.audioPriming = false;
+      });
+  }
+
   async handleStartClick() {
     if (!this.audioStarted) {
       await this.audio.init();
@@ -439,6 +466,7 @@ class NeonMissileCommand {
     this.highScoreBeforeMission = this.highScore;
     this._resetMissionState(false);
     this.running = true;
+    document.body.classList.add('mission-running');
     this.startButton.textContent = 'Restart Mission';
     this._beginNextWave();
   }
@@ -453,6 +481,7 @@ class NeonMissileCommand {
   }
 
   _resetMissionState(initialLoad) {
+    document.body.classList.remove('mission-running');
     this.wave = 0;
     this.score = 0;
     this.running = false;
@@ -1142,6 +1171,7 @@ class NeonMissileCommand {
   }
 
   _gameOver() {
+    document.body.classList.remove('mission-running');
     this.running = false;
     this.waveTransition = false;
     this._endCutscene(true);

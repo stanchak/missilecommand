@@ -9,6 +9,8 @@ export class AudioManager {
     this.masterLevel = 0.82;
     this.lastEventTime = 0;
     this.resumePromise = null;
+    this.initPromise = null;
+    this.musicEnabled = false;
   }
 
   async init() {
@@ -16,39 +18,51 @@ export class AudioManager {
       return;
     }
 
-    await Tone.start();
-    Tone.getContext().lookAhead = 0.03;
+    if (this.initPromise) {
+      await this.initPromise;
+      return;
+    }
 
-    this.master = new Tone.Gain(this.masterLevel).toDestination();
-    this.musicBus = new Tone.Gain(0.66).connect(this.master);
-    this.fxBus = new Tone.Gain(0.82).connect(this.master);
+    this.initPromise = (async () => {
+      await Tone.start();
+      await Tone.getContext().resume();
+      Tone.getContext().lookAhead = 0.03;
 
-    this.reverb = new Tone.Reverb({
-      decay: 4.8,
-      preDelay: 0.05,
-      wet: 0.34,
-    }).connect(this.master);
+      this.master = new Tone.Gain(this.masterLevel).toDestination();
+      this.musicBus = new Tone.Gain(0.66).connect(this.master);
+      this.fxBus = new Tone.Gain(0.82).connect(this.master);
 
-    this.delay = new Tone.PingPongDelay({
-      delayTime: '8n',
-      feedback: 0.26,
-      wet: 0.28,
-    }).connect(this.reverb);
+      this.reverb = new Tone.Reverb({
+        decay: 4.8,
+        preDelay: 0.05,
+        wet: 0.34,
+      }).connect(this.master);
 
-    this.musicFilter = new Tone.Filter({
-      type: 'lowpass',
-      frequency: 14500,
-      Q: 1,
-    }).connect(this.musicBus);
+      this.delay = new Tone.PingPongDelay({
+        delayTime: '8n',
+        feedback: 0.26,
+        wet: 0.28,
+      }).connect(this.reverb);
 
-    this._createInstruments();
-    this._createMusicLoops();
+      this.musicFilter = new Tone.Filter({
+        type: 'lowpass',
+        frequency: 14500,
+        Q: 1,
+      }).connect(this.musicBus);
 
-    Tone.Transport.bpm.value = MISSION_TEMPO;
-    Tone.Transport.start();
-    this.lastEventTime = Tone.now();
+      this._createInstruments();
+      this._createMusicLoops();
 
-    this.ready = true;
+      Tone.Transport.bpm.value = MISSION_TEMPO;
+      this.lastEventTime = Tone.now();
+      this.ready = true;
+    })();
+
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
   }
 
   _createInstruments() {
@@ -263,6 +277,21 @@ export class AudioManager {
     }
   }
 
+  _startTransportIfNeeded() {
+    if (Tone.Transport.state !== 'started') {
+      Tone.Transport.start();
+    }
+  }
+
+  warmup() {
+    if (this.ready) {
+      this.resumeIfSuspended();
+      return Promise.resolve();
+    }
+
+    return this.init().catch(() => {});
+  }
+
   resumeIfSuspended() {
     if (!this.ready) {
       return;
@@ -278,6 +307,13 @@ export class AudioManager {
     }
 
     this.resumePromise = context.resume()
+      .then(() => {
+        if (this.musicEnabled) {
+          this._triggerSafe(() => {
+            this._startTransportIfNeeded();
+          });
+        }
+      })
       .catch(() => {})
       .finally(() => {
         this.resumePromise = null;
@@ -310,9 +346,13 @@ export class AudioManager {
       return;
     }
 
+    this.musicEnabled = true;
     this.resumeIfSuspended();
-    Tone.Transport.bpm.rampTo(MISSION_TEMPO, 0.2);
-    this.musicFilter.frequency.rampTo(14500, 0.2);
+    this._triggerSafe(() => {
+      this._startTransportIfNeeded();
+      Tone.Transport.bpm.rampTo(MISSION_TEMPO, 0.2);
+      this.musicFilter.frequency.rampTo(14500, 0.2);
+    });
   }
 
   playerLaunch() {
