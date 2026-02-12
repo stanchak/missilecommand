@@ -165,6 +165,8 @@ class NeonMissileCommand {
     this.structureGroup = new THREE.Group();
     this.dynamicGroup = new THREE.Group();
     this.scene.add(this.environmentGroup, this.structureGroup, this.dynamicGroup);
+
+    this._updateCameraLayout();
   }
 
   _buildScene() {
@@ -424,10 +426,42 @@ class NeonMissileCommand {
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    this._updateCameraLayout();
     this.renderer.setSize(width, height);
     this.composer.setSize(width, height);
     this.bloomPass.setSize(width, height);
+  }
+
+  _updateCameraLayout() {
+    const aspect = Math.max(this.camera.aspect, 0.35);
+    const narrowFactor = THREE.MathUtils.clamp((1.12 - aspect) / 0.72, 0, 1);
+    const fov = THREE.MathUtils.lerp(50, 74, narrowFactor);
+
+    this.camera.fov = fov;
+
+    const viewTop = WORLD.top + 40;
+    const viewBottom = WORLD.bottom - 50;
+    const halfWidth = (WORLD.right - WORLD.left) * 0.5;
+    const halfHeight = (viewTop - viewBottom) * 0.5;
+
+    const halfFovRad = THREE.MathUtils.degToRad(fov * 0.5);
+    const distForHeight = halfHeight / Math.tan(halfFovRad);
+    const distForWidth = halfWidth / (Math.tan(halfFovRad) * aspect);
+    const distance = Math.max(distForHeight, distForWidth);
+
+    const lookY = THREE.MathUtils.lerp(10, 22, narrowFactor);
+    const camY = lookY + THREE.MathUtils.lerp(55, 66, narrowFactor);
+    const camZ = distance + THREE.MathUtils.lerp(140, 220, narrowFactor);
+
+    this.baseCameraPos.set(0, camY, camZ);
+    this.baseLookTarget.set(0, lookY, 0);
+
+    this.camera.position.copy(this.baseCameraPos);
+    this.camera.lookAt(this.baseLookTarget);
+    this.camera.updateProjectionMatrix();
+
+    this.scene.fog.near = Math.max(720, camZ * 0.5);
+    this.scene.fog.far = Math.max(1950, camZ * 1.95);
   }
 
   async _ensureAudioReady() {
