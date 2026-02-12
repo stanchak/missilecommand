@@ -412,11 +412,8 @@ class NeonMissileCommand {
     this.handleTouchStart = this.handleTouchStart.bind(this);
     this.handleStartClick = this.handleStartClick.bind(this);
     this.handleAudioClick = this.handleAudioClick.bind(this);
-    this.handleUserGesture = this.handleUserGesture.bind(this);
 
     window.addEventListener('resize', this.handleResize);
-    window.addEventListener('pointerdown', this.handleUserGesture, { passive: true });
-    window.addEventListener('touchstart', this.handleUserGesture, { passive: true });
     this.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
     this.renderer.domElement.addEventListener('touchstart', this.handleTouchStart, { passive: false });
     this.startButton.addEventListener('click', this.handleStartClick);
@@ -442,24 +439,32 @@ class NeonMissileCommand {
       return this.audioReadyPromise;
     }
 
-    this.audioPriming = true;
-    this.audioReadyPromise = (async () => {
-      try {
-        await this.audio.init();
-        if (this.audio.ready) {
-          this.audioStarted = true;
-          this.audio.setMuted(this.audioMuted);
-          if (this.running && !this.audioMuted) {
-            this.audio.resumeIfSuspended();
-            this.audio.newMission();
-          }
-          return true;
-        }
-      } catch (_error) {
-        // Keep gameplay running even if Safari blocks audio init.
+    const markReady = () => {
+      if (!this.audio.ready) {
+        return false;
       }
-      return false;
-    })();
+
+      this.audioStarted = true;
+      this.audio.setMuted(this.audioMuted);
+      if (this.running && !this.audioMuted) {
+        this.audio.resumeIfSuspended();
+        this.audio.newMission();
+      }
+      return true;
+    };
+
+    this.audioPriming = true;
+    const initAttempt = this.audio.init()
+      .then(() => markReady())
+      .catch(() => false);
+
+    const timeout = new Promise((resolve) => {
+      window.setTimeout(() => {
+        resolve(false);
+      }, 1600);
+    });
+
+    this.audioReadyPromise = Promise.race([initAttempt, timeout]);
 
     try {
       return await this.audioReadyPromise;
@@ -469,17 +474,8 @@ class NeonMissileCommand {
     }
   }
 
-  handleUserGesture() {
-    if (this.audioStarted) {
-      this.audio.resumeIfSuspended();
-      return;
-    }
-
+  handleStartClick() {
     this._ensureAudioReady();
-  }
-
-  async handleStartClick() {
-    await this._ensureAudioReady();
 
     if (this.audioStarted) {
       this.audio.resumeIfSuspended();
