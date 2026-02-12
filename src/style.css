@@ -282,4 +282,16 @@ button.secondary {
     letter-spacing: 0.06em;
     opacity: 0.86;
   }
+
+  .mission-running #status {
+    display: none;
+  }
+
+  .mission-running .score-panel {
+    opacity: 0.78;
+  }
+
+  .mission-running .controls-panel {
+    opacity: 0.68;
+  }
 }

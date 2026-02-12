@@ -408,6 +408,7 @@ class NeonMissileCommand {
   _bindEvents() {
     this.handleResize = this.handleResize.bind(this);
     this.handlePointerDown = this.handlePointerDown.bind(this);
+    this.handleTouchStart = this.handleTouchStart.bind(this);
     this.handleStartClick = this.handleStartClick.bind(this);
     this.handleAudioClick = this.handleAudioClick.bind(this);
     this.handleUserGesture = this.handleUserGesture.bind(this);
@@ -416,6 +417,7 @@ class NeonMissileCommand {
     window.addEventListener('pointerdown', this.handleUserGesture, { passive: true });
     window.addEventListener('touchstart', this.handleUserGesture, { passive: true });
     this.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
+    this.renderer.domElement.addEventListener('touchstart', this.handleTouchStart, { passive: false });
     this.startButton.addEventListener('click', this.handleStartClick);
     this.audioButton.addEventListener('click', this.handleAudioClick);
   }
@@ -430,39 +432,42 @@ class NeonMissileCommand {
     this.bloomPass.setSize(width, height);
   }
 
+  async _ensureAudioReady() {
+    if (this.audioStarted || this.audioPriming) {
+      return;
+    }
+
+    this.audioPriming = true;
+    try {
+      await this.audio.init();
+      if (this.audio.ready) {
+        this.audioStarted = true;
+        this.audio.setMuted(this.audioMuted);
+      }
+    } catch (_error) {
+      // Keep gameplay running even if Safari blocks audio init.
+    } finally {
+      this.audioPriming = false;
+    }
+  }
+
   handleUserGesture() {
     if (this.audioStarted) {
       this.audio.resumeIfSuspended();
       return;
     }
 
-    if (this.audioPriming) {
-      return;
-    }
-
-    this.audioPriming = true;
-    this.audio.warmup()
-      .then(() => {
-        if (this.audio.ready) {
-          this.audioStarted = true;
-          this.audio.setMuted(this.audioMuted);
-        }
-      })
-      .finally(() => {
-        this.audioPriming = false;
-      });
+    this._ensureAudioReady();
   }
 
   async handleStartClick() {
-    if (!this.audioStarted) {
-      await this.audio.init();
-      this.audioStarted = true;
-      this.audio.setMuted(this.audioMuted);
-    } else {
+    await this._ensureAudioReady();
+
+    if (this.audioStarted) {
       this.audio.resumeIfSuspended();
+      this.audio.newMission();
     }
 
-    this.audio.newMission();
     this.highScoreBeforeMission = this.highScore;
     this._resetMissionState(false);
     this.running = true;
@@ -473,8 +478,12 @@ class NeonMissileCommand {
 
   handleAudioClick() {
     this.audioMuted = !this.audioMuted;
-    this.audio.setMuted(this.audioMuted);
-    if (!this.audioMuted) {
+    if (this.audioStarted) {
+      this.audio.setMuted(this.audioMuted);
+    } else {
+      this._ensureAudioReady();
+    }
+    if (!this.audioMuted && this.audioStarted) {
       this.audio.resumeIfSuspended();
     }
     this.audioButton.textContent = this.audioMuted ? 'Unmute' : 'Mute';
@@ -736,6 +745,20 @@ class NeonMissileCommand {
   }
 
   handlePointerDown(event) {
+    this._handleAimInput(event.clientX, event.clientY);
+  }
+
+  handleTouchStart(event) {
+    if (!event.changedTouches || event.changedTouches.length === 0) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    this._handleAimInput(touch.clientX, touch.clientY);
+    event.preventDefault();
+  }
+
+  _handleAimInput(clientX, clientY) {
     if (this.audioStarted) {
       this.audio.resumeIfSuspended();
     }
@@ -745,8 +768,8 @@ class NeonMissileCommand {
     }
 
     const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
     if (!this.raycaster.ray.intersectPlane(this.pointerPlane, this.pointerHit)) {
